@@ -13,7 +13,12 @@ import requests
 # Import fallback analyzer (kamus kata)
 from analyzer import analisis_berita as analisis_fallback
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+# Model Gemini — flash-lite punya limit lebih tinggi (30 RPM vs 15 RPM)
+GEMINI_MODELS = [
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash",
+]
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -87,28 +92,37 @@ Instruksi:
 Format output (JSON saja, tanpa penjelasan tambahan):
 {{"rangkuman": "...", "sentimen": "POSITIF/NEGATIF/NETRAL", "skor_sentimen": 0.0}}"""
 
-        # Panggil Gemini REST API langsung (tanpa SDK, lebih reliable)
-        # Retry sampai 3x kalau kena rate limit (429)
+        # Panggil Gemini REST API — coba beberapa model
+        # TIDAK retry agresif karena retry menumpuk request dan memperburuk 429
         resp = None
-        for attempt in range(3):
+        last_status = None
+
+        for model in GEMINI_MODELS:
+            api_url = f"{GEMINI_API_BASE}/{model}:generateContent?key={api_key}"
+
             resp = requests.post(
-                f"{GEMINI_API_URL}?key={api_key}",
+                api_url,
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
                 },
                 headers={"Content-Type": "application/json"},
                 timeout=30,
             )
+            last_status = resp.status_code
 
-            if resp.status_code == 429:
-                # Rate limited, tunggu lalu retry
-                time.sleep(5 * (attempt + 1))
+            if resp.status_code == 200:
+                break
+            elif resp.status_code == 429:
+                # Rate limited — tunggu 60 detik penuh lalu coba model berikutnya
+                time.sleep(60)
                 continue
-            break
+            else:
+                # Error lain, coba model berikutnya tanpa delay
+                continue
 
-        if resp.status_code != 200:
+        if resp is None or resp.status_code != 200:
             hasil = analisis_fallback(judul, konten, keyword=keyword)
-            hasil["sumber_analisis"] = f"Kamus Kata (Gemini HTTP {resp.status_code})"
+            hasil["sumber_analisis"] = f"Kamus Kata (Gemini HTTP {last_status})"
             return hasil
 
         data = resp.json()

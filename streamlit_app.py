@@ -211,7 +211,7 @@ if btn_search:
                     # Analyze (Gemini jika ada key, fallback ke kamus)
                     if gemini_key:
                         hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
-                        time.sleep(4)  # Delay agar tidak kena rate limit Gemini
+                        time.sleep(5)  # Delay 5 detik = max 12 req/menit (under 15 RPM limit)
                     else:
                         hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
 
@@ -272,7 +272,7 @@ if btn_search:
                     if berita.konten and berita.status == "OK":
                         if gemini_key:
                             hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
-                            time.sleep(4)  # Delay agar tidak kena rate limit Gemini
+                            time.sleep(5)  # Delay 5 detik = max 12 req/menit (under 15 RPM limit)
                         else:
                             hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
                         rangkuman = hasil["rangkuman"]
