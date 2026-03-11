@@ -227,6 +227,7 @@ if btn_search:
                             "Skor": hasil["skor_sentimen"],
                             "Rangkuman": hasil["rangkuman"],
                             "Konten": berita.konten,
+                            "AI": hasil.get("sumber_analisis", "Kamus Kata"),
                         })
 
                 progress_bar.progress(1.0)
@@ -263,6 +264,7 @@ if btn_search:
                     rangkuman = ""
                     sentimen = ""
                     skor = 0.0
+                    sumber_ai = "Kamus Kata"
                     if berita.konten and berita.status == "OK":
                         if gemini_key:
                             hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
@@ -271,6 +273,7 @@ if btn_search:
                         rangkuman = hasil["rangkuman"]
                         sentimen = hasil["sentimen"]
                         skor = hasil["skor_sentimen"]
+                        sumber_ai = hasil.get("sumber_analisis", "Kamus Kata")
 
                     all_berita.append({
                         "No": i + 1,
@@ -283,6 +286,7 @@ if btn_search:
                         "Skor": skor,
                         "Rangkuman": rangkuman,
                         "Konten": berita.konten,
+                        "AI": sumber_ai,
                     })
 
                 progress_bar.progress(1.0)
@@ -376,6 +380,7 @@ if data:
             with col_info2:
                 st.markdown(f"**Status:** {b['Status']}")
                 st.markdown(f"**Sentimen:** {badge} (skor: {b['Skor']})")
+                st.markdown(f"**Analisis:** {b.get('AI', '-')}")
 
             if b["URL"]:
                 st.markdown(f"🔗 [Buka artikel]({b['URL']})")

@@ -54,7 +54,9 @@ def analisis_berita_gemini(
         Dict dengan keys: rangkuman, sentimen, skor_sentimen
     """
     if not api_key or not konten:
-        return analisis_fallback(judul, konten, keyword=keyword)
+        hasil = analisis_fallback(judul, konten, keyword=keyword)
+        hasil["sumber_analisis"] = "Kamus Kata"
+        return hasil
 
     try:
         client = genai.Client(api_key=api_key)
@@ -105,11 +107,16 @@ Format output (JSON saja, tanpa penjelasan tambahan):
                 "rangkuman": str(result.get("rangkuman", "")),
                 "sentimen": sentimen,
                 "skor_sentimen": round(skor, 2),
+                "sumber_analisis": "Gemini AI",
             }
 
         # JSON parse gagal, fallback
-        return analisis_fallback(judul, konten, keyword=keyword)
+        hasil = analisis_fallback(judul, konten, keyword=keyword)
+        hasil["sumber_analisis"] = "Kamus Kata (Gemini gagal parse)"
+        return hasil
 
     except Exception:
         # Gemini error (rate limit, network, dll), fallback ke kamus
-        return analisis_fallback(judul, konten, keyword=keyword)
+        hasil = analisis_fallback(judul, konten, keyword=keyword)
+        hasil["sumber_analisis"] = "Kamus Kata (Gemini error)"
+        return hasil
