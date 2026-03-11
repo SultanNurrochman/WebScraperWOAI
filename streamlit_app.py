@@ -1,6 +1,7 @@
 """
 Streamlit App — Scraping Berita Google News Indonesia
-Fitur: pencarian berita, ekstraksi konten, analisis sentimen & rangkuman (tanpa AI).
+Fitur: pencarian berita, ekstraksi konten, analisis sentimen & rangkuman.
+Menggunakan Google Gemini AI (gratis) atau fallback kamus kata.
 Deploy ke Streamlit Cloud.
 """
 
@@ -11,6 +12,7 @@ from io import BytesIO
 
 from scraper import GoogleNewsScraper, BeritaItem
 from analyzer import analisis_berita
+from gemini_analyzer import analisis_berita_gemini
 
 # ══════════════════════════════════════════════════════════════════════
 # Config
@@ -86,6 +88,31 @@ with st.sidebar:
     )
 
     btn_search = st.button("🔍 Cari Berita", type="primary", use_container_width=True)
+
+    st.divider()
+
+    # ── Gemini API Key ──
+    st.subheader("🤖 AI Analyzer (Opsional)")
+
+    # Cek apakah ada API key di secrets (untuk deploy)
+    default_key = ""
+    try:
+        default_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        pass
+
+    gemini_key = st.text_input(
+        "Gemini API Key",
+        value=default_key,
+        type="password",
+        placeholder="Masukkan API key...",
+        help="Gratis dari https://aistudio.google.com/apikey",
+    )
+
+    if gemini_key:
+        st.success("✅ Gemini AI aktif — analisis lebih akurat")
+    else:
+        st.info("💡 Tanpa API key, analisis menggunakan kamus kata (tetap berjalan)")
 
 # ══════════════════════════════════════════════════════════════════════
 # Session State
@@ -181,8 +208,11 @@ if btn_search:
                     if berita.status != "OK" or not berita.konten:
                         continue
 
-                    # Analyze
-                    hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
+                    # Analyze (Gemini jika ada key, fallback ke kamus)
+                    if gemini_key:
+                        hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
+                    else:
+                        hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
 
                     if hasil["sentimen"] == target_sentimen:
                         matched_count += 1
@@ -234,7 +264,10 @@ if btn_search:
                     sentimen = ""
                     skor = 0.0
                     if berita.konten and berita.status == "OK":
-                        hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
+                        if gemini_key:
+                            hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
+                        else:
+                            hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
                         rangkuman = hasil["rangkuman"]
                         sentimen = hasil["sentimen"]
                         skor = hasil["skor_sentimen"]
