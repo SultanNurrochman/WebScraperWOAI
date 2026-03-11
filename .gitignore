@@ -3,3 +3,7 @@ __pycache__/
 .env
 app.py
 summarizer.py
+api/
+public/
+Procfile
+runtime.txt
