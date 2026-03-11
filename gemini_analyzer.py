@@ -7,10 +7,12 @@ Fallback ke analisis berbasis kamus jika Gemini gagal atau API key kosong.
 
 import json
 import re
-from google import genai
+import requests
 
 # Import fallback analyzer (kamus kata)
 from analyzer import analisis_berita as analisis_fallback
+
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -59,8 +61,6 @@ def analisis_berita_gemini(
         return hasil
 
     try:
-        client = genai.Client(api_key=api_key)
-
         # Potong konten jika terlalu panjang (hemat token)
         konten_potong = konten[:4000] if len(konten) > 4000 else konten
 
@@ -86,11 +86,24 @@ Instruksi:
 Format output (JSON saja, tanpa penjelasan tambahan):
 {{"rangkuman": "...", "sentimen": "POSITIF/NEGATIF/NETRAL", "skor_sentimen": 0.0}}"""
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
+        # Panggil Gemini REST API langsung (tanpa SDK, lebih reliable)
+        resp = requests.post(
+            f"{GEMINI_API_URL}?key={api_key}",
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+            },
+            headers={"Content-Type": "application/json"},
+            timeout=30,
         )
-        result = _parse_json_response(response.text)
+
+        if resp.status_code != 200:
+            hasil = analisis_fallback(judul, konten, keyword=keyword)
+            hasil["sumber_analisis"] = f"Kamus Kata (Gemini HTTP {resp.status_code})"
+            return hasil
+
+        data = resp.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        result = _parse_json_response(text)
 
         if result:
             sentimen = str(result.get("sentimen", "NETRAL")).upper().strip()
@@ -115,8 +128,8 @@ Format output (JSON saja, tanpa penjelasan tambahan):
         hasil["sumber_analisis"] = "Kamus Kata (Gemini gagal parse)"
         return hasil
 
-    except Exception:
+    except Exception as e:
         # Gemini error (rate limit, network, dll), fallback ke kamus
         hasil = analisis_fallback(judul, konten, keyword=keyword)
-        hasil["sumber_analisis"] = "Kamus Kata (Gemini error)"
+        hasil["sumber_analisis"] = f"Kamus Kata ({type(e).__name__}: {str(e)[:80]})"
         return hasil
