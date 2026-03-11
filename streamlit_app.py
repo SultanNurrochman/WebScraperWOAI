@@ -211,24 +211,28 @@ if btn_search:
                     # Analyze (Gemini jika ada key, fallback ke kamus)
                     if gemini_key:
                         hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
+                        time.sleep(4)  # Delay agar tidak kena rate limit Gemini
                     else:
                         hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
 
-                    if hasil["sentimen"] == target_sentimen:
-                        matched_count += 1
-                        all_berita.append({
-                            "No": matched_count,
-                            "Judul": berita.judul,
-                            "Sumber": berita.sumber,
-                            "Tanggal": berita.tanggal,
-                            "URL": berita.url_asli or berita.url,
-                            "Status": berita.status,
-                            "Sentimen": hasil["sentimen"],
-                            "Skor": hasil["skor_sentimen"],
-                            "Rangkuman": hasil["rangkuman"],
-                            "Konten": berita.konten,
-                            "AI": hasil.get("sumber_analisis", "Kamus Kata"),
-                        })
+                    # Filter berdasarkan sentimen target
+                    if hasil["sentimen"] != target_sentimen:
+                        continue
+
+                    matched_count += 1
+                    all_berita.append({
+                        "No": matched_count,
+                        "Judul": berita.judul,
+                        "Sumber": berita.sumber,
+                        "Tanggal": berita.tanggal,
+                        "URL": berita.url_asli or berita.url,
+                        "Status": berita.status,
+                        "Sentimen": hasil["sentimen"],
+                        "Skor": hasil["skor_sentimen"],
+                        "Rangkuman": hasil["rangkuman"],
+                        "Konten": berita.konten,
+                        "AI": hasil.get("sumber_analisis", "Kamus Kata"),
+                    })
 
                 progress_bar.progress(1.0)
                 status_text.text("✅ Selesai!")
@@ -268,6 +272,7 @@ if btn_search:
                     if berita.konten and berita.status == "OK":
                         if gemini_key:
                             hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
+                            time.sleep(4)  # Delay agar tidak kena rate limit Gemini
                         else:
                             hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
                         rangkuman = hasil["rangkuman"]

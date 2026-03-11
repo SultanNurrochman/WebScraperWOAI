@@ -7,6 +7,7 @@ Fallback ke analisis berbasis kamus jika Gemini gagal atau API key kosong.
 
 import json
 import re
+import time
 import requests
 
 # Import fallback analyzer (kamus kata)
@@ -87,14 +88,23 @@ Format output (JSON saja, tanpa penjelasan tambahan):
 {{"rangkuman": "...", "sentimen": "POSITIF/NEGATIF/NETRAL", "skor_sentimen": 0.0}}"""
 
         # Panggil Gemini REST API langsung (tanpa SDK, lebih reliable)
-        resp = requests.post(
-            f"{GEMINI_API_URL}?key={api_key}",
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-            },
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
+        # Retry sampai 3x kalau kena rate limit (429)
+        resp = None
+        for attempt in range(3):
+            resp = requests.post(
+                f"{GEMINI_API_URL}?key={api_key}",
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
+
+            if resp.status_code == 429:
+                # Rate limited, tunggu lalu retry
+                time.sleep(5 * (attempt + 1))
+                continue
+            break
 
         if resp.status_code != 200:
             hasil = analisis_fallback(judul, konten, keyword=keyword)
