@@ -95,24 +95,24 @@ with st.sidebar:
     st.subheader("🤖 AI Analyzer (Opsional)")
 
     # Cek apakah ada API key di secrets (untuk deploy)
-    default_key = ""
+    secret_key = ""
     try:
-        default_key = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
+        secret_key = st.secrets["GEMINI_API_KEY"]
+    except (KeyError, FileNotFoundError):
         pass
 
     gemini_key = st.text_input(
         "Gemini API Key",
-        value=default_key,
+        value=secret_key,
         type="password",
         placeholder="Masukkan API key...",
         help="Gratis dari https://aistudio.google.com/apikey",
     )
 
     if gemini_key:
-        st.success("✅ Gemini AI aktif — analisis lebih akurat")
+        st.success("✅ Gemini AI aktif")
     else:
-        st.info("💡 Tanpa API key, analisis menggunakan kamus kata (tetap berjalan)")
+        st.info("💡 Tanpa API key → pakai kamus kata")
 
 # ══════════════════════════════════════════════════════════════════════
 # Session State
@@ -294,7 +294,10 @@ if btn_search:
                 ok_count = sum(1 for b in all_berita if b["Status"] == "OK")
                 st.success(f"Berhasil mengekstrak **{ok_count}/{total}** artikel.")
 
+            # Simpan mode analisis yang digunakan
+            mode = "🤖 Gemini AI" if gemini_key else "📖 Kamus Kata"
             st.session_state.berita_data = all_berita
+            st.session_state.analisis_mode = mode
 
 # ══════════════════════════════════════════════════════════════════════
 # Display Results
@@ -303,6 +306,11 @@ if btn_search:
 data = st.session_state.berita_data
 
 if data:
+    # ── Mode indicator ──
+    mode = st.session_state.get("analisis_mode", "")
+    if mode:
+        st.caption(f"Mode analisis: **{mode}**")
+
     # ── Stats ──
     total = len(data)
     ok = sum(1 for b in data if b["Status"] == "OK")
