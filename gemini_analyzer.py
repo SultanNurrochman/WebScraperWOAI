@@ -13,12 +13,9 @@ import requests
 # Import fallback analyzer (kamus kata)
 from analyzer import analisis_berita as analisis_fallback
 
-# Model Gemini — flash-lite punya limit lebih tinggi (30 RPM vs 15 RPM)
-GEMINI_MODELS = [
-    "gemini-2.0-flash-lite",
-    "gemini-2.0-flash",
-]
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+# Model Gemini — sama dengan pattern yang work di CV scoring project
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
 def _parse_json_response(text: str) -> dict | None:
@@ -92,41 +89,48 @@ Instruksi:
 Format output (JSON saja, tanpa penjelasan tambahan):
 {{"rangkuman": "...", "sentimen": "POSITIF/NEGATIF/NETRAL", "skor_sentimen": 0.0}}"""
 
-        # Panggil Gemini REST API — coba beberapa model
-        # TIDAK retry agresif karena retry menumpuk request dan memperburuk 429
-        resp = None
-        last_status = None
+        # Panggil Gemini REST API — coba beberapa model (pattern dari CV scoring)
+        text = None
+        last_error = None
 
         for model in GEMINI_MODELS:
-            api_url = f"{GEMINI_API_BASE}/{model}:generateContent?key={api_key}"
-
-            resp = requests.post(
-                api_url,
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                },
-                headers={"Content-Type": "application/json"},
-                timeout=30,
-            )
-            last_status = resp.status_code
-
-            if resp.status_code == 200:
-                break
-            elif resp.status_code == 429:
-                # Rate limited — tunggu 60 detik penuh lalu coba model berikutnya
-                time.sleep(60)
+            try:
+                url = GEMINI_API_URL.format(model=model)
+                resp = requests.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    params={"key": api_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": 0.3,
+                            "maxOutputTokens": 4096,
+                            "responseMimeType": "application/json",
+                        },
+                    },
+                    timeout=90,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            text = parts[0].get("text", "")
+                    if text:
+                        break
+                else:
+                    last_error = f"HTTP {resp.status_code}"
+                    continue
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {str(e)[:60]}"
                 continue
-            else:
-                # Error lain, coba model berikutnya tanpa delay
-                continue
 
-        if resp is None or resp.status_code != 200:
+        if not text:
             hasil = analisis_fallback(judul, konten, keyword=keyword)
-            hasil["sumber_analisis"] = f"Kamus Kata (Gemini HTTP {last_status})"
+            hasil["sumber_analisis"] = f"Kamus Kata (Gemini {last_error})"
             return hasil
 
-        data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
         result = _parse_json_response(text)
 
         if result:
