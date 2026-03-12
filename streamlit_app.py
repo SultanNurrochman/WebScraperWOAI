@@ -182,9 +182,12 @@ if btn_search:
             status_text = st.empty()
 
             if is_targeted:
-                # ── MODE TARGETED ──
+                # ── MODE TARGETED (HYBRID) ──
+                # Tahap 1: Filter cepat pakai kamus kata (gratis, tanpa token AI)
+                # Tahap 2: Berita yang lolos → analisis mendalam pakai Gemini AI
                 matched_count = 0
                 analyzed_count = 0
+                gemini_count = 0
                 total_pool = len(search_results)
 
                 for sr in search_results:
@@ -194,7 +197,8 @@ if btn_search:
                     analyzed_count += 1
                     status_text.text(
                         f"Mencari berita {filter_sentimen.lower()}: {matched_count}/{max_results} "
-                        f"ditemukan (menganalisis {analyzed_count}/{total_pool})..."
+                        f"ditemukan (menyaring {analyzed_count}/{total_pool}, "
+                        f"Gemini: {gemini_count}x)..."
                     )
                     progress_bar.progress(matched_count / max_results if max_results > 0 else 0)
 
@@ -208,16 +212,21 @@ if btn_search:
                     if berita.status != "OK" or not berita.konten:
                         continue
 
-                    # Analyze (Gemini jika ada key, fallback ke kamus)
+                    # Tahap 1: Pre-filter pakai kamus kata (cepat & gratis)
+                    hasil_kamus = analisis_berita(berita.judul, berita.konten, keyword=keyword)
+                    if hasil_kamus["sentimen"] != target_sentimen:
+                        continue  # Skip — hemat token AI
+
+                    # Tahap 2: Lolos filter → analisis mendalam pakai Gemini
                     if gemini_key:
                         hasil = analisis_berita_gemini(berita.judul, berita.konten, keyword=keyword, api_key=gemini_key)
-                        time.sleep(5)  # Delay 5 detik = max 12 req/menit (under 15 RPM limit)
+                        gemini_count += 1
+                        time.sleep(5)  # Delay 5 detik = max 12 req/menit
+                        # Gemini bisa saja mengoreksi sentimen kamus
+                        if hasil["sentimen"] != target_sentimen:
+                            continue
                     else:
-                        hasil = analisis_berita(berita.judul, berita.konten, keyword=keyword)
-
-                    # Filter berdasarkan sentimen target
-                    if hasil["sentimen"] != target_sentimen:
-                        continue
+                        hasil = hasil_kamus
 
                     matched_count += 1
                     all_berita.append({
@@ -243,12 +252,14 @@ if btn_search:
                 if matched_count >= max_results:
                     st.success(
                         f"Berhasil menemukan **{matched_count}** berita bersentimen "
-                        f"**{filter_sentimen.lower()}** (dari {analyzed_count} artikel yang dianalisis)."
+                        f"**{filter_sentimen.lower()}** (dari {analyzed_count} disaring, "
+                        f"Gemini dipanggil {gemini_count}x)."
                     )
                 else:
                     st.warning(
                         f"Hanya ditemukan **{matched_count}** dari **{max_results}** berita "
-                        f"{filter_sentimen.lower()} yang diminta (dari {analyzed_count} artikel yang tersedia). "
+                        f"{filter_sentimen.lower()} yang diminta (dari {analyzed_count} artikel, "
+                        f"Gemini dipanggil {gemini_count}x). "
                         f"Coba perluas periode atau ubah kata kunci."
                     )
 
@@ -304,7 +315,12 @@ if btn_search:
                 st.success(f"Berhasil mengekstrak **{ok_count}/{total}** artikel.")
 
             # Simpan mode analisis yang digunakan
-            mode = "🤖 Gemini AI" if gemini_key else "📖 Kamus Kata"
+            if gemini_key and is_targeted:
+                mode = "🔀 Hybrid (Kamus → Gemini AI)"
+            elif gemini_key:
+                mode = "🤖 Gemini AI"
+            else:
+                mode = "📖 Kamus Kata"
             st.session_state.berita_data = all_berita
             st.session_state.analisis_mode = mode
 
